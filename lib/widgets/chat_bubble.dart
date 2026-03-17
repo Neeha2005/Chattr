@@ -1,6 +1,5 @@
 // lib/widgets/chat_bubble.dart
-// ✨ Upgraded: animated entrance, emoji reactions, copy on long press,
-//    swipe-to-reply, AI persona avatars, wow-factor design
+// ✨ Persona-themed bubbles — each AI persona has unique gradient colors
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,26 +7,20 @@ import 'package:provider/provider.dart';
 import '../models/message.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
+import '../theme/persona_theme.dart';
 
-// ── Available emoji reactions ─────────────────────────────────────────────
 const List<String> kReactionEmojis = ['👍', '❤️', '😂', '😮', '🔥', '👏'];
-
-// ── AI Persona Avatars ────────────────────────────────────────────────────
-const Map<String, String> kPersonaAvatars = {
-  'Assistant': '🤖',
-  'Tutor': '👨‍🏫',
-  'Chef': '👨‍🍳',
-  'Fitness': '💪',
-};
 
 class ChatBubble extends StatefulWidget {
   final Message message;
   final String persona;
+  final PersonaTheme personaTheme;
 
   const ChatBubble({
     super.key,
     required this.message,
     this.persona = 'Assistant',
+    required this.personaTheme,
   });
 
   @override
@@ -48,7 +41,6 @@ class _ChatBubbleState extends State<ChatBubble>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-
     _scaleAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
@@ -61,7 +53,6 @@ class _ChatBubbleState extends State<ChatBubble>
     ).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
     );
-
     _animController.forward();
   }
 
@@ -71,7 +62,6 @@ class _ChatBubbleState extends State<ChatBubble>
     super.dispose();
   }
 
-  // ── Long Press → Copy + Reactions ────────────────────────────────────────
   void _onLongPress(BuildContext context) {
     HapticFeedback.mediumImpact();
     _showOptionsSheet(context);
@@ -80,6 +70,7 @@ class _ChatBubbleState extends State<ChatBubble>
   void _showOptionsSheet(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = context.read<ChatProvider>();
+    final pt = widget.personaTheme;
 
     showModalBottomSheet(
       context: context,
@@ -92,18 +83,11 @@ class _ChatBubbleState extends State<ChatBubble>
           border: Border.all(
             color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha:0.2),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Reaction Row ───────────────────────────────────────────
+            // Reaction row
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
               child: Row(
@@ -122,9 +106,7 @@ class _ChatBubbleState extends State<ChatBubble>
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: hasReaction
-                            ? (isDark
-                            ? AppTheme.neonBlue.withValues(alpha:0.2)
-                            : AppTheme.neonPurple.withValues(alpha:0.1))
+                            ? pt.primary.withValues(alpha: 0.2)
                             : Colors.transparent,
                         shape: BoxShape.circle,
                       ),
@@ -135,16 +117,13 @@ class _ChatBubbleState extends State<ChatBubble>
                 }).toList(),
               ),
             ),
-
             const Divider(height: 1),
-
-            // ── Action Buttons ─────────────────────────────────────────
             _ActionTile(
               icon: Icons.copy_rounded,
               label: 'Copy message',
+              color: pt.primary,
               onTap: () {
-                Clipboard.setData(
-                    ClipboardData(text: widget.message.text));
+                Clipboard.setData(ClipboardData(text: widget.message.text));
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -160,6 +139,7 @@ class _ChatBubbleState extends State<ChatBubble>
             _ActionTile(
               icon: Icons.reply_rounded,
               label: 'Reply',
+              color: pt.primary,
               onTap: () {
                 provider.setReplyTo(widget.message);
                 Navigator.pop(context);
@@ -177,6 +157,7 @@ class _ChatBubbleState extends State<ChatBubble>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isUser = widget.message.isUser;
     final isError = widget.message.isError;
+    final pt = widget.personaTheme;
 
     return FadeTransition(
       opacity: _fadeAnim,
@@ -193,12 +174,11 @@ class _ChatBubbleState extends State<ChatBubble>
             confirmDismiss: (_) async {
               context.read<ChatProvider>().setReplyTo(widget.message);
               HapticFeedback.lightImpact();
-              return false; // don't actually dismiss
+              return false;
             },
-            background: _SwipeReplyBackground(isUser: isUser),
+            background: _SwipeBackground(isUser: isUser, color: pt.primary),
             child: Padding(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
               child: Row(
                 mainAxisAlignment: isUser
                     ? MainAxisAlignment.end
@@ -206,8 +186,7 @@ class _ChatBubbleState extends State<ChatBubble>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (!isUser) ...[
-                    _PersonaAvatar(
-                        persona: widget.persona, isDark: isDark),
+                    _PersonaAvatar(theme: pt, isDark: isDark),
                     const SizedBox(width: 8),
                   ],
                   Flexible(
@@ -216,15 +195,15 @@ class _ChatBubbleState extends State<ChatBubble>
                           ? CrossAxisAlignment.end
                           : CrossAxisAlignment.start,
                       children: [
-                        // ── Reply Preview ───────────────────────────
                         if (widget.message.replyText != null)
                           _ReplyPreview(
                             text: widget.message.replyText!,
                             isUser: isUser,
                             isDark: isDark,
+                            color: pt.primary,
                           ),
 
-                        // ── Bubble ──────────────────────────────────
+                        // ── Bubble ───────────────────────────────
                         GestureDetector(
                           onLongPress: () => _onLongPress(context),
                           child: Container(
@@ -236,26 +215,17 @@ class _ChatBubbleState extends State<ChatBubble>
                               gradient: isError
                                   ? null
                                   : isUser
-                                  ? (isDark
-                                  ? const LinearGradient(
+                                  ? LinearGradient(
                                 colors: [
-                                  Color(0xFF00D4FF),
-                                  Color(0xFF7C3AED),
+                                  pt.bubbleColor,
+                                  pt.bubbleEnd,
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               )
-                                  : const LinearGradient(
-                                colors: [
-                                  Color(0xFF7C3AED),
-                                  Color(0xFF5B21B6),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ))
                                   : null,
                               color: isError
-                                  ? Colors.red.withValues(alpha:0.15)
+                                  ? Colors.red.withValues(alpha: 0.15)
                                   : isUser
                                   ? null
                                   : (isDark
@@ -280,12 +250,9 @@ class _ChatBubbleState extends State<ChatBubble>
                               boxShadow: [
                                 BoxShadow(
                                   color: isUser
-                                      ? (isDark
-                                      ? AppTheme.neonBlue
-                                      : AppTheme.neonPurple)
-                                      .withValues(alpha:0.25)
-                                      : Colors.black.withValues(alpha:0.06),
-                                  blurRadius: isUser ? 12 : 6,
+                                      ? pt.glowColor.withValues(alpha: 0.3)
+                                      : Colors.black.withValues(alpha: 0.06),
+                                  blurRadius: isUser ? 14 : 6,
                                   offset: const Offset(0, 3),
                                 ),
                               ],
@@ -302,20 +269,18 @@ class _ChatBubbleState extends State<ChatBubble>
                                     : AppTheme.lightText),
                                 fontSize: 15,
                                 height: 1.45,
-                                fontWeight: FontWeight.w400,
                               ),
                             ),
                           ),
                         ),
 
-                        // ── Reactions Row ───────────────────────────
                         if (widget.message.reactions.isNotEmpty)
                           _ReactionsRow(
                             reactions: widget.message.reactions,
                             isDark: isDark,
+                            color: pt.primary,
                           ),
 
-                        // ── Timestamp ────────────────────────────────
                         Padding(
                           padding: const EdgeInsets.only(
                               top: 4, left: 4, right: 4),
@@ -355,29 +320,38 @@ class _ChatBubbleState extends State<ChatBubble>
 
 // ── Persona Avatar ────────────────────────────────────────────────────────────
 class _PersonaAvatar extends StatelessWidget {
-  final String persona;
+  final PersonaTheme theme;
   final bool isDark;
-  const _PersonaAvatar({required this.persona, required this.isDark});
+  const _PersonaAvatar({required this.theme, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final emoji = kPersonaAvatars[persona] ?? '🤖';
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: isDark
-              ? [AppTheme.neonBlue.withValues(alpha:0.3), AppTheme.neonPurple.withValues(alpha:0.3)]
-              : [const Color(0xFFEDE9FE), const Color(0xFFDDD6FE)],
+          colors: [
+            theme.primary.withValues(alpha: isDark ? 0.3 : 0.2),
+            theme.secondary.withValues(alpha: isDark ? 0.3 : 0.15),
+          ],
         ),
         border: Border.all(
-          color: isDark ? AppTheme.neonBlue.withValues(alpha:0.4) : AppTheme.neonPurple.withValues(alpha:0.3),
+          color: theme.primary.withValues(alpha: 0.4),
           width: 1.5,
         ),
+        boxShadow: isDark
+            ? [
+          BoxShadow(
+            color: theme.glowColor.withValues(alpha: 0.2),
+            blurRadius: 6,
+          )
+        ]
+            : [],
       ),
-      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
+      child:
+      Center(child: Text(theme.emoji, style: const TextStyle(fontSize: 18))),
     );
   }
 }
@@ -392,12 +366,10 @@ class _UserAvatar extends StatelessWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: isDark
-              ? [AppTheme.neonPurple, AppTheme.neonBlue]
-              : [const Color(0xFF7C3AED), const Color(0xFF5B21B6)],
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
         ),
       ),
       child: const Center(
@@ -407,9 +379,10 @@ class _UserAvatar extends StatelessWidget {
 }
 
 // ── Swipe Reply Background ────────────────────────────────────────────────────
-class _SwipeReplyBackground extends StatelessWidget {
+class _SwipeBackground extends StatelessWidget {
   final bool isUser;
-  const _SwipeReplyBackground({required this.isUser});
+  final Color color;
+  const _SwipeBackground({required this.isUser, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -419,42 +392,40 @@ class _SwipeReplyBackground extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.neonPurple.withValues(alpha:0.15),
+          color: color.withValues(alpha: 0.15),
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.reply_rounded,
-            color: AppTheme.neonPurple, size: 22),
+        child: Icon(Icons.reply_rounded, color: color, size: 22),
       ),
     );
   }
 }
 
-// ── Reply Preview Banner ──────────────────────────────────────────────────────
+// ── Reply Preview ─────────────────────────────────────────────────────────────
 class _ReplyPreview extends StatelessWidget {
   final String text;
   final bool isUser;
   final bool isDark;
+  final Color color;
   const _ReplyPreview(
-      {required this.text, required this.isUser, required this.isDark});
+      {required this.text,
+        required this.isUser,
+        required this.isDark,
+        required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72),
+      constraints:
+      BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withValues(alpha:0.06)
-            : Colors.black.withValues(alpha:0.04),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border(
-          left: BorderSide(
-            color: isUser ? AppTheme.neonBlue : AppTheme.neonPurple,
-            width: 3,
-          ),
-        ),
+        border: Border(left: BorderSide(color: color, width: 3)),
       ),
       child: Text(
         text.length > 60 ? '${text.substring(0, 60)}…' : text,
@@ -472,7 +443,9 @@ class _ReplyPreview extends StatelessWidget {
 class _ReactionsRow extends StatelessWidget {
   final List<String> reactions;
   final bool isDark;
-  const _ReactionsRow({required this.reactions, required this.isDark});
+  final Color color;
+  const _ReactionsRow(
+      {required this.reactions, required this.isDark, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -486,18 +459,11 @@ class _ReactionsRow extends StatelessWidget {
           padding:
           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: isDark
-                ? AppTheme.darkCard
-                : AppTheme.lightCard,
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark
-                  ? AppTheme.darkBorder
-                  : AppTheme.lightBorder,
-            ),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
-          child: Text(emoji,
-              style: const TextStyle(fontSize: 14)),
+          child: Text(emoji, style: const TextStyle(fontSize: 14)),
         ))
             .toList(),
       ),
@@ -505,13 +471,17 @@ class _ReactionsRow extends StatelessWidget {
   }
 }
 
-// ── Action Tile (bottom sheet) ────────────────────────────────────────────────
+// ── Action Tile ───────────────────────────────────────────────────────────────
 class _ActionTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Color color;
   final VoidCallback onTap;
   const _ActionTile(
-      {required this.icon, required this.label, required this.onTap});
+      {required this.icon,
+        required this.label,
+        required this.color,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -520,13 +490,10 @@ class _ActionTile extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isDark
-              ? AppTheme.darkBorder
-              : AppTheme.lightCard,
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, size: 20,
-            color: isDark ? Colors.white70 : AppTheme.lightText),
+        child: Icon(icon, size: 20, color: color),
       ),
       title: Text(label,
           style: TextStyle(
@@ -540,7 +507,12 @@ class _ActionTile extends StatelessWidget {
 // ── Typing Indicator ──────────────────────────────────────────────────────────
 class TypingIndicator extends StatefulWidget {
   final String persona;
-  const TypingIndicator({super.key, this.persona = 'Assistant'});
+  final PersonaTheme personaTheme;
+  const TypingIndicator({
+    super.key,
+    this.persona = 'Assistant',
+    required this.personaTheme,
+  });
 
   @override
   State<TypingIndicator> createState() => _TypingIndicatorState();
@@ -557,17 +529,13 @@ class _TypingIndicatorState extends State<TypingIndicator>
     _dotControllers = List.generate(
       3,
           (i) => AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 500),
-      ),
+          vsync: this, duration: const Duration(milliseconds: 500)),
     );
     _dotAnims = _dotControllers
         .map((c) => Tween<double>(begin: 0, end: -6).animate(
       CurvedAnimation(parent: c, curve: Curves.easeInOut),
     ))
         .toList();
-
-    // staggered bounce
     for (int i = 0; i < 3; i++) {
       Future.delayed(Duration(milliseconds: i * 160), () {
         if (mounted) _dotControllers[i].repeat(reverse: true);
@@ -590,7 +558,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          _PersonaAvatar(persona: widget.persona, isDark: isDark),
+          _PersonaAvatar(theme: widget.personaTheme, isDark: isDark),
           const SizedBox(width: 8),
           Container(
             padding:
@@ -606,13 +574,6 @@ class _TypingIndicatorState extends State<TypingIndicator>
               border: Border.all(
                 color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha:0.05),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -627,9 +588,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
                       margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isDark
-                            ? AppTheme.neonBlue
-                            : AppTheme.neonPurple,
+                        color: widget.personaTheme.primary,
                       ),
                     ),
                   ),
